@@ -8,13 +8,6 @@ Built-in AI Chat kernel for JupyterLite using Chrome's built-in AI.
 pip install built-in-chat
 ```
 
-Or for development:
-
-```bash
-cd built-in-chat
-pip install -e .
-```
-
 ## Development
 
 ```bash

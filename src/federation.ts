@@ -1,9 +1,6 @@
 // built-in-chat/src/federation.ts
 // Module Federation container for JupyterLite
 
-import { streamText } from "ai";
-import { builtInAI } from "@built-in-ai/core";
-
 declare const window: any;
 
 console.log("[built-in-chat/federation] Setting up Module Federation container");
@@ -86,40 +83,61 @@ const container = {
 
         // Define Chrome built-in AI Chat session inline (browser-only)
         class ChatSession {
-          private model: ReturnType<typeof builtInAI>;
+          private session: any = null;
 
-          constructor(opts: any = {}) {
-            this.model = builtInAI();
+          constructor(_opts: any = {}) {
             console.log("[ChatSession] Using Chrome built-in AI");
           }
 
           async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
             console.log("[ChatSession] Sending prompt to Chrome built-in AI:", prompt);
 
-            const availability = await this.model.availability();
-            if (availability === "unavailable") {
+            // Check if the API is available
+            if (!window.ai?.languageModel) {
               throw new Error("Browser does not support Chrome built-in AI.");
             }
-            if (availability === "downloadable" || availability === "downloading") {
-              await this.model.createSessionWithProgress((report: any) => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(
-                    new CustomEvent("builtinai:model-progress", { detail: report })
-                  );
-                }
-              });
+
+            // Check model availability
+            const capabilities = await window.ai.languageModel.capabilities();
+            if (capabilities.available === "no") {
+              throw new Error("Chrome built-in AI model is not available.");
             }
 
-            const result = await streamText({
-              model: this.model,
-              messages: [{ role: "user", content: prompt }],
-            });
+            // Create session if not already created, with progress monitoring
+            if (!this.session) {
+              if (capabilities.available === "after-download") {
+                // Model needs to be downloaded, create with progress monitoring
+                this.session = await window.ai.languageModel.create({
+                  monitor(m: any) {
+                    m.addEventListener("downloadprogress", (e: any) => {
+                      if (typeof window !== "undefined") {
+                        const progress = e.loaded / e.total;
+                        window.dispatchEvent(
+                          new CustomEvent("builtinai:model-progress", {
+                            detail: { progress, text: `Downloading model: ${Math.round(progress * 100)}%` }
+                          })
+                        );
+                      }
+                    });
+                  }
+                });
+              } else {
+                this.session = await window.ai.languageModel.create();
+              }
+            }
 
+            // Use streaming API
+            const stream = await this.session.promptStreaming(prompt);
             let reply = "";
-            for await (const chunk of result.textStream) {
-              reply += chunk;
-              if (onChunk) {
-                onChunk(chunk);
+            let previousLength = 0;
+            
+            for await (const chunk of stream) {
+              // The stream yields the full text so far, so we need to extract just the new part
+              const newContent = chunk.slice(previousLength);
+              previousLength = chunk.length;
+              reply = chunk;
+              if (onChunk && newContent) {
+                onChunk(newContent);
               }
             }
 

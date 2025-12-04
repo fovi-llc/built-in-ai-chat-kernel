@@ -1,8 +1,16 @@
 // built-in-chat/src/ChatSession.ts
 // Browser-side chat session that uses Chrome's built-in AI Prompt API directly
-// Uses self.ai.languageModel to work in WebWorker environments (JupyterLite kernels)
+// Uses the global LanguageModel class exposed by Chrome/Edge Built-in AI
 
-declare const self: any;
+// TypeScript declarations for the Chrome Built-in AI Prompt API
+declare class LanguageModel {
+  static availability(): Promise<"unavailable" | "available" | "downloadable" | "downloading">;
+  static create(options?: {
+    monitor?: (monitor: { addEventListener: (event: string, callback: (e: ProgressEvent) => void) => void }) => void;
+  }): Promise<LanguageModel>;
+  prompt(input: string): Promise<string>;
+  promptStreaming(input: string): ReadableStream<string>;
+}
 
 export interface ChatSessionOptions {
   /**
@@ -13,7 +21,7 @@ export interface ChatSessionOptions {
 }
 
 export class ChatSession {
-  private session: any = null;
+  private session: LanguageModel | null = null;
 
   constructor(_opts: ChatSessionOptions = {}) {
     console.log("[ChatSession] Using Chrome built-in AI");
@@ -26,46 +34,56 @@ export class ChatSession {
    * @returns The full response text
    */
   async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
-    // Check if the API is available (using self for WebWorker compatibility)
-    if (!self.ai?.languageModel) {
+    // Check if the API is available via the global LanguageModel class
+    if (typeof LanguageModel === "undefined") {
       throw new Error("Browser does not support Chrome built-in AI.");
     }
 
     // Check model availability
-    const capabilities = await self.ai.languageModel.capabilities();
-    if (capabilities.available === "no") {
+    const availability = await LanguageModel.availability();
+    if (availability === "unavailable") {
       throw new Error("Chrome built-in AI model is not available.");
     }
 
     // Create session if not already created, with progress monitoring
     if (!this.session) {
-      if (capabilities.available === "after-download") {
+      if (availability === "downloadable" || availability === "downloading") {
         // Model needs to be downloaded, create with progress monitoring
-        this.session = await self.ai.languageModel.create({
-          monitor(m: any) {
-            m.addEventListener("downloadprogress", (e: any) => {
-              const progress = e.loaded / e.total;
+        this.session = await LanguageModel.create({
+          monitor(m) {
+            m.addEventListener("downloadprogress", (e: ProgressEvent) => {
+              // e.loaded is a value between 0 and 1 representing download progress
+              const progress = e.loaded;
               console.log(`[ChatSession] Downloading model: ${Math.round(progress * 100)}%`);
             });
           }
         });
       } else {
-        this.session = await self.ai.languageModel.create();
+        this.session = await LanguageModel.create();
       }
     }
 
     // Use streaming API
-    const stream = await this.session.promptStreaming(prompt);
+    const stream = this.session.promptStreaming(prompt);
     let reply = "";
     let previousLength = 0;
-    for await (const chunk of stream) {
-      // The stream yields the full text so far, so we need to extract just the new part
-      const newContent = chunk.slice(previousLength);
-      previousLength = chunk.length;
-      reply = chunk;
-      if (onChunk && newContent) {
-        onChunk(newContent);
+    const reader = stream.getReader();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        // The stream yields the full text so far, so we need to extract just the new part
+        const newContent = value.slice(previousLength);
+        previousLength = value.length;
+        reply = value;
+        if (onChunk && newContent) {
+          onChunk(newContent);
+        }
       }
+    } finally {
+      reader.releaseLock();
     }
 
     return reply;

@@ -131,10 +131,9 @@ const container = {
               }
             }
 
-            // Use streaming API
+            // Use streaming API - each chunk is a delta (only the new content)
             const stream = this.session.promptStreaming(prompt);
             let reply = "";
-            let previousLength = 0;
             const reader = stream.getReader();
             
             try {
@@ -142,12 +141,10 @@ const container = {
                 const { done, value } = await reader.read();
                 if (done) break;
                 
-                // The stream yields the full text so far, so we need to extract just the new part
-                const newContent = value.slice(previousLength);
-                previousLength = value.length;
-                reply = value;
-                if (onChunk && newContent) {
-                  onChunk(newContent);
+                // Append the chunk directly (delta streaming - each chunk is new content only)
+                reply += value;
+                if (onChunk && value) {
+                  onChunk(value);
                 }
               }
             } finally {

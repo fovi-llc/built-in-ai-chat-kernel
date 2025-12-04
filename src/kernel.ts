@@ -1,6 +1,74 @@
 // built-in-chat/src/kernel.ts
 import { BaseKernel, IKernel } from "@jupyterlite/kernel";
-import { ChatSession } from "./ChatSession.js";
+
+// TypeScript declarations for the Chrome Built-in AI Prompt API
+declare class LanguageModel {
+  static availability(): Promise<"unavailable" | "available" | "downloadable" | "downloading">;
+  static create(options?: {
+    monitor?: (monitor: { addEventListener: (event: string, callback: (e: ProgressEvent) => void) => void }) => void;
+  }): Promise<LanguageModel>;
+  prompt(input: string): Promise<string>;
+  promptStreaming(input: string): ReadableStream<string>;
+}
+
+interface ChatSessionOptions {
+  model?: string;
+}
+
+// ChatSession is defined inline here for TypeScript compilation
+// The actual code used at runtime is in federation.ts
+class ChatSession {
+  private session: LanguageModel | null = null;
+
+  constructor(_opts: ChatSessionOptions = {}) {
+    console.log("[ChatSession] Using Chrome built-in AI");
+  }
+
+  async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
+    if (typeof LanguageModel === "undefined") {
+      throw new Error("Browser does not support Chrome built-in AI.");
+    }
+
+    const availability = await LanguageModel.availability();
+    if (availability === "unavailable") {
+      throw new Error("Chrome built-in AI model is not available.");
+    }
+
+    if (!this.session) {
+      if (availability === "downloadable" || availability === "downloading") {
+        this.session = await LanguageModel.create({
+          monitor(m) {
+            m.addEventListener("downloadprogress", (e: ProgressEvent) => {
+              const progress = e.loaded;
+              console.log(`[ChatSession] Downloading model: ${Math.round(progress * 100)}%`);
+            });
+          }
+        });
+      } else {
+        this.session = await LanguageModel.create();
+      }
+    }
+
+    const stream = this.session.promptStreaming(prompt);
+    let reply = "";
+    const reader = stream.getReader();
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        reply += value;
+        if (onChunk && value) {
+          onChunk(value);
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return reply;
+  }
+}
 
 type KernelOptions = IKernel.IOptions & {
   /**
@@ -60,7 +128,7 @@ export class BuiltInChatKernel extends BaseKernel {
       status: "ok",
       protocol_version: "5.3",
       implementation: "built-in-chat-kernel",
-      implementation_version: "0.1.1",
+      implementation_version: "0.2.6dev6",
       language_info: {
         name: "markdown",
         version: "0.0.0",

@@ -1,10 +1,17 @@
 // built-in-chat/src/federation.ts
 // Module Federation container for JupyterLite
 
-import { streamText } from "ai";
-import { builtInAI } from "@built-in-ai/core";
-
 declare const window: any;
+
+// TypeScript declarations for the Chrome Built-in AI Prompt API
+declare class LanguageModel {
+  static availability(): Promise<"unavailable" | "available" | "downloadable" | "downloading">;
+  static create(options?: {
+    monitor?: (monitor: { addEventListener: (event: string, callback: (e: ProgressEvent) => void) => void }) => void;
+  }): Promise<LanguageModel>;
+  prompt(input: string): Promise<string>;
+  promptStreaming(input: string): ReadableStream<string>;
+}
 
 console.log("[built-in-chat/federation] Setting up Module Federation container");
 
@@ -84,43 +91,64 @@ const container = {
 
         console.log("[built-in-chat/federation] Got BaseKernel from shared scope:", BaseKernel);
 
-        // Define Chrome built-in AI Chat session inline (browser-only)
+        // Define Chrome built-in AI Chat session inline
         class ChatSession {
-          private model: ReturnType<typeof builtInAI>;
+          private session: LanguageModel | null = null;
 
-          constructor(opts: any = {}) {
-            this.model = builtInAI();
+          constructor(_opts: any = {}) {
             console.log("[ChatSession] Using Chrome built-in AI");
           }
 
           async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
             console.log("[ChatSession] Sending prompt to Chrome built-in AI:", prompt);
 
-            const availability = await this.model.availability();
-            if (availability === "unavailable") {
+            // Check if the API is available via the global LanguageModel class
+            if (typeof LanguageModel === "undefined") {
               throw new Error("Browser does not support Chrome built-in AI.");
             }
-            if (availability === "downloadable" || availability === "downloading") {
-              await this.model.createSessionWithProgress((report: any) => {
-                if (typeof window !== "undefined") {
-                  window.dispatchEvent(
-                    new CustomEvent("builtinai:model-progress", { detail: report })
-                  );
-                }
-              });
+
+            // Check model availability
+            const availability = await LanguageModel.availability();
+            if (availability === "unavailable") {
+              throw new Error("Chrome built-in AI model is not available.");
             }
 
-            const result = await streamText({
-              model: this.model,
-              messages: [{ role: "user", content: prompt }],
-            });
-
-            let reply = "";
-            for await (const chunk of result.textStream) {
-              reply += chunk;
-              if (onChunk) {
-                onChunk(chunk);
+            // Create session if not already created, with progress monitoring
+            if (!this.session) {
+              if (availability === "downloadable" || availability === "downloading") {
+                // Model needs to be downloaded, create with progress monitoring
+                this.session = await LanguageModel.create({
+                  monitor(m) {
+                    m.addEventListener("downloadprogress", (e: ProgressEvent) => {
+                      // e.loaded is a value between 0 and 1 representing download progress
+                      const progress = e.loaded;
+                      console.log(`[ChatSession] Downloading model: ${Math.round(progress * 100)}%`);
+                    });
+                  }
+                });
+              } else {
+                this.session = await LanguageModel.create();
               }
+            }
+
+            // Use streaming API - each chunk is a delta (only the new content)
+            const stream = this.session.promptStreaming(prompt);
+            let reply = "";
+            const reader = stream.getReader();
+            
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                
+                // Append the chunk directly (delta streaming - each chunk is new content only)
+                reply += value;
+                if (onChunk && value) {
+                  onChunk(value);
+                }
+              }
+            } finally {
+              reader.releaseLock();
             }
 
             console.log("[ChatSession] Got reply from Chrome built-in AI:", reply);
@@ -271,14 +299,6 @@ const container = {
               console.log("[built-in-chat] Display name: Built-in AI Chat");
             } catch (error) {
               console.error("[built-in-chat] ===== REGISTRATION ERROR =====", error);
-            }
-
-            if (typeof document !== "undefined") {
-              // Progress indicator for Chrome built-in AI
-              window.addEventListener("builtinai:model-progress", (ev: any) => {
-                const { progress: p, text } = ev.detail;
-                console.log(`[built-in-chat] Model progress: ${text} (${Math.round((p ?? 0) * 100)}%)`);
-              });
             }
           },
         };

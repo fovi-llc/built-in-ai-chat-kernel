@@ -2,4 +2,4 @@
 # This is a JupyterLab extension with no Python code.
 # The extension is distributed via shared-data in the wheel.
 
-__version__ = "0.2.6dev6"
+__version__ = "0.2.6dev7"

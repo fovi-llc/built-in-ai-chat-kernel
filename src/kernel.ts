@@ -60,7 +60,7 @@ export class BuiltInChatKernel extends BaseKernel {
       status: "ok",
       protocol_version: "5.3",
       implementation: "built-in-chat-kernel",
-      implementation_version: "0.1.1",
+      implementation_version: "0.2.6dev6",
       language_info: {
         name: "markdown",
         version: "0.0.0",

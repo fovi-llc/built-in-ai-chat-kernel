@@ -63,7 +63,6 @@ export class ChatSession {
     const stream = await this.session.promptStreaming(prompt);
     let reply = "";
     let previousLength = 0;
-    
     for await (const chunk of stream) {
       // The stream yields the full text so far, so we need to extract just the new part
       const newContent = chunk.slice(previousLength);
@@ -73,7 +72,7 @@ export class ChatSession {
         onChunk(newContent);
       }
     }
-    
+
     return reply;
   }
 }

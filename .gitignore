@@ -1,3 +1,10 @@
+# Node.js dependencies
+node_modules/
+
+# Build outputs
+dist/
+labextension/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -3,11 +3,3 @@
 # The extension is distributed via shared-data in the wheel.
 
 __version__ = "0.1.2"
-
-
-def _jupyter_labextension_paths():
-    """Return metadata about the JupyterLab extension."""
-    return [{
-        "src": "built_in_chat/labextension",
-        "dest": "@wiki3-ai/built-in-chat"
-    }]

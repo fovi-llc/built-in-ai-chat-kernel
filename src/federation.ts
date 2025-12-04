@@ -3,7 +3,6 @@
 
 import { streamText } from "ai";
 import { builtInAI } from "@built-in-ai/core";
-import { BUILTIN_AI_MODELS, DEFAULT_BUILTIN_AI_MODEL } from "./models.js";
 
 declare const window: any;
 
@@ -82,26 +81,20 @@ const container = {
 
         // Import JupyterLab/JupyterLite modules from shared scope
         const { BaseKernel, IKernelSpecs } = await importShared('@jupyterlite/kernel');
-        const { Widget } = await importShared('@lumino/widgets');
-
-        const { ReactWidget } = await importShared('@jupyterlab/apputils');
-        const React = await importShared('react');
-        const { HTMLSelect } = await importShared('@jupyterlab/ui-components');
-
 
         console.log("[built-in-chat/federation] Got BaseKernel from shared scope:", BaseKernel);
 
-        // Define Chrome built-in AI Chat kernel inline (browser-only)
-        class ChatHttpKernel {
+        // Define Chrome built-in AI Chat session inline (browser-only)
+        class ChatSession {
           private model: ReturnType<typeof builtInAI>;
 
           constructor(opts: any = {}) {
             this.model = builtInAI();
-            console.log("[ChatHttpKernel] Using Chrome built-in AI");
+            console.log("[ChatSession] Using Chrome built-in AI");
           }
 
           async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
-            console.log("[ChatHttpKernel] Sending prompt to Chrome built-in AI:", prompt);
+            console.log("[ChatSession] Sending prompt to Chrome built-in AI:", prompt);
 
             const availability = await this.model.availability();
             if (availability === "unavailable") {
@@ -130,19 +123,19 @@ const container = {
               }
             }
 
-            console.log("[ChatHttpKernel] Got reply from Chrome built-in AI:", reply);
+            console.log("[ChatSession] Got reply from Chrome built-in AI:", reply);
             return reply;
           }
         }
 
         // Define BuiltInChatKernel extending BaseKernel
         class BuiltInChatKernel extends BaseKernel {
-          private chat: ChatHttpKernel;
+          private chat: ChatSession;
 
           constructor(options: any) {
             super(options);
             const model = options.model;
-            this.chat = new ChatHttpKernel({ model });
+            this.chat = new ChatSession({ model });
           }
 
           async executeRequest(content: any): Promise<any> {

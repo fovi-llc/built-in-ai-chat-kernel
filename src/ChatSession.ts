@@ -1,25 +1,25 @@
-// built-in-chat/src/ChatHttpKernel.ts
-// Browser-side chat kernel that uses Chrome's built-in AI via @built-in-ai/core
+// built-in-chat/src/ChatSession.ts
+// Browser-side chat session that uses Chrome's built-in AI via @built-in-ai/core
 
 import { streamText } from "ai";
 import { builtInAI } from "@built-in-ai/core";
 
 declare const window: any;
 
-export interface ChatHttpKernelOptions {
+export interface ChatSessionOptions {
   /**
-   * Optional model identifier for chromeAI.
+   * Optional model identifier for Chrome AI.
    * Defaults to the default Chrome built-in AI model.
    */
   model?: string;
 }
 
-export class ChatHttpKernel {
+export class ChatSession {
   private model: ReturnType<typeof builtInAI>;
 
-  constructor(opts: ChatHttpKernelOptions = {}) {
+  constructor(opts: ChatSessionOptions = {}) {
     this.model = builtInAI();
-    console.log("[ChatHttpKernel] Using Chrome built-in AI");
+    console.log("[ChatSession] Using Chrome built-in AI");
   }
 
   /**
@@ -58,4 +58,3 @@ export class ChatHttpKernel {
     return reply;
   }
 }
-

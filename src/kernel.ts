@@ -1,21 +1,21 @@
 // built-in-chat/src/kernel.ts
 import { BaseKernel, IKernel } from "@jupyterlite/kernel";
-import { ChatHttpKernel } from "./ChatHttpKernel.js";
+import { ChatSession } from "./ChatSession.js";
 
 type KernelOptions = IKernel.IOptions & {
   /**
-   * Optional model identifier to pass through to ChatHttpKernel.
+   * Optional model identifier to pass through to ChatSession.
    */
   model?: string;
 };
 
 export class BuiltInChatKernel extends BaseKernel {
-  private chat: ChatHttpKernel;
+  private chat: ChatSession;
 
   constructor(options: KernelOptions) {
     super(options);
     const model = options.model;
-    this.chat = new ChatHttpKernel({ model });
+    this.chat = new ChatSession({ model });
   }
 
   async executeRequest(content: any): Promise<any> {

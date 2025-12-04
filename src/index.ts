@@ -1,5 +1,4 @@
 import { JupyterFrontEnd, JupyterFrontEndPlugin } from "@jupyterlab/application";
-import { BUILTIN_AI_MODELS, DEFAULT_BUILTIN_AI_MODEL } from "./models.js";
 
 import { BuiltInChatKernel } from "./kernel.js";
 

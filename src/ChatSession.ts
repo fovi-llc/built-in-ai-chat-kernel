@@ -1,7 +1,8 @@
 // built-in-chat/src/ChatSession.ts
 // Browser-side chat session that uses Chrome's built-in AI Prompt API directly
+// Uses self.ai.languageModel to work in WebWorker environments (JupyterLite kernels)
 
-declare const window: any;
+declare const self: any;
 
 export interface ChatSessionOptions {
   /**
@@ -25,13 +26,13 @@ export class ChatSession {
    * @returns The full response text
    */
   async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
-    // Check if the API is available
-    if (!window.ai?.languageModel) {
+    // Check if the API is available (using self for WebWorker compatibility)
+    if (!self.ai?.languageModel) {
       throw new Error("Browser does not support Chrome built-in AI.");
     }
 
     // Check model availability
-    const capabilities = await window.ai.languageModel.capabilities();
+    const capabilities = await self.ai.languageModel.capabilities();
     if (capabilities.available === "no") {
       throw new Error("Chrome built-in AI model is not available.");
     }
@@ -40,22 +41,16 @@ export class ChatSession {
     if (!this.session) {
       if (capabilities.available === "after-download") {
         // Model needs to be downloaded, create with progress monitoring
-        this.session = await window.ai.languageModel.create({
+        this.session = await self.ai.languageModel.create({
           monitor(m: any) {
             m.addEventListener("downloadprogress", (e: any) => {
-              if (typeof window !== "undefined") {
-                const progress = e.loaded / e.total;
-                window.dispatchEvent(
-                  new CustomEvent("builtinai:model-progress", {
-                    detail: { progress, text: `Downloading model: ${Math.round(progress * 100)}%` }
-                  })
-                );
-              }
+              const progress = e.loaded / e.total;
+              console.log(`[ChatSession] Downloading model: ${Math.round(progress * 100)}%`);
             });
           }
         });
       } else {
-        this.session = await window.ai.languageModel.create();
+        this.session = await self.ai.languageModel.create();
       }
     }
 

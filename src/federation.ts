@@ -2,6 +2,7 @@
 // Module Federation container for JupyterLite
 
 declare const window: any;
+declare const self: any;
 
 console.log("[built-in-chat/federation] Setting up Module Federation container");
 
@@ -81,7 +82,7 @@ const container = {
 
         console.log("[built-in-chat/federation] Got BaseKernel from shared scope:", BaseKernel);
 
-        // Define Chrome built-in AI Chat session inline (browser-only)
+        // Define Chrome built-in AI Chat session inline (WebWorker-compatible)
         class ChatSession {
           private session: any = null;
 
@@ -92,13 +93,13 @@ const container = {
           async send(prompt: string, onChunk?: (chunk: string) => void): Promise<string> {
             console.log("[ChatSession] Sending prompt to Chrome built-in AI:", prompt);
 
-            // Check if the API is available
-            if (!window.ai?.languageModel) {
+            // Check if the API is available (using self for WebWorker compatibility)
+            if (!self.ai?.languageModel) {
               throw new Error("Browser does not support Chrome built-in AI.");
             }
 
             // Check model availability
-            const capabilities = await window.ai.languageModel.capabilities();
+            const capabilities = await self.ai.languageModel.capabilities();
             if (capabilities.available === "no") {
               throw new Error("Chrome built-in AI model is not available.");
             }
@@ -107,22 +108,16 @@ const container = {
             if (!this.session) {
               if (capabilities.available === "after-download") {
                 // Model needs to be downloaded, create with progress monitoring
-                this.session = await window.ai.languageModel.create({
+                this.session = await self.ai.languageModel.create({
                   monitor(m: any) {
                     m.addEventListener("downloadprogress", (e: any) => {
-                      if (typeof window !== "undefined") {
-                        const progress = e.loaded / e.total;
-                        window.dispatchEvent(
-                          new CustomEvent("builtinai:model-progress", {
-                            detail: { progress, text: `Downloading model: ${Math.round(progress * 100)}%` }
-                          })
-                        );
-                      }
+                      const progress = e.loaded / e.total;
+                      console.log(`[ChatSession] Downloading model: ${Math.round(progress * 100)}%`);
                     });
                   }
                 });
               } else {
-                this.session = await window.ai.languageModel.create();
+                this.session = await self.ai.languageModel.create();
               }
             }
 
@@ -288,14 +283,6 @@ const container = {
               console.log("[built-in-chat] Display name: Built-in AI Chat");
             } catch (error) {
               console.error("[built-in-chat] ===== REGISTRATION ERROR =====", error);
-            }
-
-            if (typeof document !== "undefined") {
-              // Progress indicator for Chrome built-in AI
-              window.addEventListener("builtinai:model-progress", (ev: any) => {
-                const { progress: p, text } = ev.detail;
-                console.log(`[built-in-chat] Model progress: ${text} (${Math.round((p ?? 0) * 100)}%)`);
-              });
             }
           },
         };
